@@ -1,0 +1,52 @@
+name: Apply staged YA1 site bundle
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for staged bundle
+        id: staged
+        shell: bash
+        run: |
+          if [ -f .site-parts/part-00 ]; then
+            echo "has_bundle=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_bundle=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Reassemble and apply site
+        if: steps.staged.outputs.has_bundle == 'true'
+        shell: bash
+        run: |
+          cat .site-parts/part-* > /tmp/ya1-site-bundle.zip
+          echo "cadbcdd61e4347131f6859ca14eaf54a3fa372dd64a6c6ab9df22eb7b4bedbea  /tmp/ya1-site-bundle.zip" | sha256sum -c -
+          rm -rf assets
+          rm -f script.js
+          unzip -oq /tmp/ya1-site-bundle.zip -d .
+          rm -rf .site-parts
+
+      - name: Commit applied site
+        if: steps.staged.outputs.has_bundle == 'true'
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes"
+            exit 0
+          fi
+          git commit -m "Deploy complete HD YA1 site"
+          git push origin HEAD:main
